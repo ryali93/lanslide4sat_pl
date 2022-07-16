@@ -6,7 +6,9 @@ exp/*
 *.sh
 *.tif
 *.npy
+*.zip
 validation_map/*
 test_map/*
 TrainData/*
 ValidData/*
+TestData/*
