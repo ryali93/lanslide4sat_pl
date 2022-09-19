@@ -2,8 +2,9 @@ library(rlist)
 library(rgee)
 library(mapview)
 library(sf)
+library(raster)
 
-ee_Initialize()
+ee_Initialize(drive = T)
 
 d = st_read("E:/ai/desliza_s.kml")
 d = st_zm(d, drop = TRUE, what = "ZM")
@@ -22,14 +23,40 @@ patch = function(i, w, h){
       c(y + h_m, y + h_m, y - h_m, y - h_m, y + h_m)))
   )
   
-  # pol_p = sf::st_sfc(pol, crs = 32718)
   return(pol)
 }
 
 lista_p = list()
 for(i in 1:5){
-  p = patch(i, 1280, 1280)
+  p = patch(i, 1270, 1270)
   lista_p = list.append(lista_p, p)
 }
 pols = st_sfc(lista_p, crs=32718)
-mapview(list(d_t, pols))
+pols_wgs = st_transform(pols, 4326)
+
+p1 = sf_as_ee(pols_wgs[[1]])
+
+# DOWNLOAD SENTINEL2 IMAGES 
+dataset = ee$ImageCollection('COPERNICUS/S2_SR')$
+  filterDate('2018-01-01', '2020-01-30')$
+  filter(ee$Filter$lt('CLOUDY_PIXEL_PERCENTAGE', 10))$
+  filterBounds(p1)$
+  first()$
+  select("B1","B2","B3","B4","B5","B6","B7","B8","B8A","B9","B11","B12")
+
+d1 = ee_as_raster(image=dataset, region=p1, via = "drive", scale = 10)
+
+# DOWNLOAD ALOS PALSAR IMAGES
+r1 = raster("E:/ai/nuevo/AP_25513_PLR_F6960_RT1/AP_25513_PLR_F6960_RT1.dem.tif")
+r1_clip = crop(r1, as(pols[[1]], "Spatial"))
+slope1_clip = slopeAspect(r1_clip, out="slope")
+
+
+# MERGE DATASET
+B1_12 = brick("E:/ai/nuevo/01_landslide.tif")
+r1_r = raster::resample(r1_clip, B1_12)
+s1_r = slopeAspect(r1_r, out="slope")
+
+B1_14 = addLayer(B1_12, r1_r, s1_r)
+
+writeRaster(B1_14, "E:/ai/nuevo/0001.tif")

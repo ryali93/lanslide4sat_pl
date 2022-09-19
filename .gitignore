@@ -12,4 +12,5 @@ test_map/*
 TrainData/*
 ValidData/*
 TestData/*
+NewData/*
 bib/
