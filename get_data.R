@@ -3,10 +3,12 @@ library(rgee)
 library(mapview)
 library(sf)
 library(raster)
+library(terra)
+library(rhdf5)
 
 ee_Initialize(drive = T)
 
-d = st_read("E:/ai/desliza_s.kml")
+d = st_read("E:/ai/desliza_f.kml")
 d = st_zm(d, drop = TRUE, what = "ZM")
 d_t = st_transform(d, crs = 32718)
 
@@ -59,4 +61,15 @@ s1_r = slopeAspect(r1_r, out="slope")
 
 B1_14 = addLayer(B1_12, r1_r, s1_r)
 
-writeRaster(B1_14, "E:/ai/nuevo/0001.tif")
+writeRaster(B1_14, "E:/ai/nuevo/0001.tif", overwrite=T)
+
+
+# EXPORT TO H5
+s = rast("E:/ai/nuevo/0001.tif")
+nx = minmax(s)
+rn = (s - nx[1,]) / (nx[2,] - nx[1,])
+
+ar = as.array(rn)
+writeHDF5Array(ar, "E:/ai/nuevo/0001_ar.tif")
+
+h5write(ar, "E:/ai/nuevo/0001_ar.h5", "img")
