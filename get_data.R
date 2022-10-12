@@ -1,21 +1,25 @@
-library(rlist)
 library(rgee)
-library(mapview)
+library(tidyverse)
 library(sf)
 library(raster)
 library(terra)
-library(rhdf5)
+library(jsonlite)
 
 ee_Initialize(drive = T)
 
-d = st_read("E:/ai/desliza_f.kml")
-d = st_zm(d, drop = TRUE, what = "ZM")
-d_t = st_transform(d, crs = 32718)
+setwd("E:/ai/new_dataset")
 
-lista_p = list()
-patch = function(i, w, h){
-  x = st_coordinates(d_t[i,])[1]
-  y = st_coordinates(d_t[i,])[2]
+read_point <- function(path){
+  # Read point path
+  point = st_read(path)
+  point = st_zm(point, drop = TRUE, what = "ZM")
+  point_utm = st_transform(point, crs = 32718)
+}
+
+generate_patch <- function(point, w, h){
+  # Create polygon from coordinates
+  x = st_coordinates(point)[1]
+  y = st_coordinates(point)[2]
   w_m = w/2
   h_m = h/2
   
@@ -24,52 +28,140 @@ patch = function(i, w, h){
       c(x - w_m, x + w_m, x + w_m, x - w_m, x - w_m),
       c(y + h_m, y + h_m, y - h_m, y - h_m, y + h_m)))
   )
-  
   return(pol)
 }
 
-lista_p = list()
-for(i in 1:5){
-  p = patch(i, 1270, 1270)
-  lista_p = list.append(lista_p, p)
+download_sen2 <- function(pol){
+  # Download Sentinel2 bands
+  dataset = ee$ImageCollection('COPERNICUS/S2_SR')$
+    filterDate('2018-01-01', '2020-01-30')$
+    filter(ee$Filter$lt('CLOUDY_PIXEL_PERCENTAGE', 10))$
+    filterBounds(pol)$
+    first()$
+    select("B1","B2","B3","B4","B5","B6","B7","B8","B8A","B9","B11","B12")
+  
+  patch_image = ee_as_raster(image=dataset, region=pol, via = "drive", scale = 10)
+  return(patch_image)
 }
-pols = st_sfc(lista_p, crs=32718)
-pols_wgs = st_transform(pols, 4326)
 
-p1 = sf_as_ee(pols_wgs[[1]])
+download_alos <- function(pol){
+  # Download ALOS PALSAR images
+  r1 = raster("AP_25513_PLR_F6960_RT1/AP_25513_PLR_F6960_RT1.dem.tif")
+  r1_clip = crop(r1, as(pol, "Spatial"))
+  return(r1_clip)
+}
 
-# DOWNLOAD SENTINEL2 IMAGES 
-dataset = ee$ImageCollection('COPERNICUS/S2_SR')$
-  filterDate('2018-01-01', '2020-01-30')$
-  filter(ee$Filter$lt('CLOUDY_PIXEL_PERCENTAGE', 10))$
-  filterBounds(p1)$
-  first()$
-  select("B1","B2","B3","B4","B5","B6","B7","B8","B8A","B9","B11","B12")
+download_srtm <- function(pol){
+  # Download srtm
+  dataset = ee$Image('')$
+    filterDate('2006-01-01', '2011-01-30')$
+    filterBounds(pol)$
+    first()$
+    select("")
+  
+  patch_image = ee_as_raster(image=dataset, region=pol, via = "drive", scale = 10)
+  return(patch_image)
+}
 
-d1 = ee_as_raster(image=dataset, region=p1, via = "drive", scale = 10)
-
-# DOWNLOAD ALOS PALSAR IMAGES
-r1 = raster("E:/ai/nuevo/AP_25513_PLR_F6960_RT1/AP_25513_PLR_F6960_RT1.dem.tif")
-r1_clip = crop(r1, as(pols[[1]], "Spatial"))
-slope1_clip = slopeAspect(r1_clip, out="slope")
-
-
-# MERGE DATASET
-B1_12 = brick("E:/ai/nuevo/01_landslide.tif")
-r1_r = raster::resample(r1_clip, B1_12)
-s1_r = slopeAspect(r1_r, out="slope")
-
-B1_14 = addLayer(B1_12, r1_r, s1_r)
-
-writeRaster(B1_14, "E:/ai/nuevo/0001.tif", overwrite=T)
+create_dir_general <- function(){
+  # 1. Create principal folder
+  dir.create(
+    path = "landslide/landslide.iris/segmentation",
+    showWarnings = FALSE, 
+    recursive = TRUE
+  )
+}
 
 
-# EXPORT TO H5
-s = rast("E:/ai/nuevo/0001.tif")
-nx = minmax(s)
-rn = (s - nx[1,]) / (nx[2,] - nx[1,])
+create_dir_point <- function(path_point){
+  # 1. Create dir for each point
+  dir.create(
+    path = sprintf("landslide/%s/input", path_point),
+    showWarnings = FALSE,
+    recursive = TRUE
+  )
+  
+  dir.create(
+    path = sprintf("landslide/%s/target", path_point),
+    showWarnings = FALSE,
+    recursive = TRUE
+  )
+}
 
-ar = as.array(rn)
-writeHDF5Array(ar, "E:/ai/nuevo/0001_ar.tif")
+create_pol <- function(pol){
+  # Create pol for download
+  pol_sf = st_sfc(polygon, crs=32718)
+  pol_wgs = st_transform(pol_sf, 4326)
+  pol_ee = sf_as_ee(pol_wgs)
+}
 
-h5write(ar, "E:/ai/nuevo/0001_ar.h5", "img")
+merge_img <- function(sen2, dem){
+  dem_res = raster::resample(dem, sen2)
+  slope_res = slopeAspect(dem_res, out="slope")
+  
+  b1_b14 = addLayer(sen2, dem_res, slope_res)
+  return(brick(b1_b14))
+}
+
+export_h5 <- function(ras){
+  # Export img to h5 file
+  nx = minmax(ras)
+  rn = (ras - nx[1,]) / (nx[2,] - nx[1,])
+  ar = as.array(rn)
+}
+
+create_metadata <- function(point, scene_id){
+  coords = st_coordinates(point)
+  lj = list("spacecraft_id" = "Sentinel2/AlosPalsar",
+       "scene_id" = scene_id,
+       "location" = c(coords[2], coords[1]),
+       "resolution" = 10
+  )
+  j = toJSON(lj, pretty = T, auto_unbox = T)
+}
+
+# ---------------------------------------------------------------
+
+path_points <- "E:/ai/desliza_f.kml"
+# Create folders
+create_dir_general()
+# Read points
+points <- read_point(path_points)
+
+for(i in 44:nrow(points)){ #nrow(points)
+  tryCatch({
+    # 1. Create dirs and save points
+    point = points[i,]
+    point_wgs = st_transform(point, 4326)
+    i_path = paste0("point_", str_pad(as.character(i), 3, side = "left", pad = "0"))
+    create_dir_point(i_path)
+    st_write(point, dsn = sprintf("landslide/%s/%s.gpkg", i_path, i_path), layer = i_path)
+    
+    # 2. Create polygons
+    polygon = generate_patch(point, 1490, 1490)
+    polygon_ee = create_pol(polygon)
+    
+    # 3. Download satellite images
+    dem = download_alos(polygon)
+    sen2 = download_sen2(polygon_ee)
+    img = merge_img(sen2, dem)
+    
+    # 4. Save imgs
+    for(i in 1:nlayers(img)){
+      terra::writeRaster(img[[i]], sprintf("landslide/%s/input/B%s.tif", i_path, as.character(i)), overwrite=T)
+    }
+    
+    # 5. Export h5 file
+    arr = export_h5(rast(img))
+    h5write(arr, sprintf("landslide/%s/%s.h5", i_path, i_path), "img")
+    
+    # 6. Create metadata
+    metadata = create_metadata(point_wgs, i_path)
+    write(metadata, sprintf("landslide/%s/metadata.json", i_path))
+  }, 
+  error = function(cond){
+    message(i)
+    return(NA)
+  })
+}
+
