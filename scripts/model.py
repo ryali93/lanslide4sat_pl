@@ -1,61 +1,139 @@
-import tensorflow as tf
-from tensorflow.keras import layers
+import pytorch_lightning as pl
+from torch import nn, sigmoid
+from torch.nn import functional as F
+from torch.optim import Adam
+from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+import torchmetrics
 
-def unet_model(IMG_WIDTH, IMG_HIGHT, IMG_CHANNELS):
-    inputs = layers.Input((IMG_WIDTH, IMG_HIGHT, IMG_CHANNELS))
+import wandb
 
-    # Contraction path
-    c1 = layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(inputs)
-    c1 = layers.Dropout(0.1)(c1)
-    c1 = layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c1)
-    p1 = layers.MaxPooling2D((2, 2))(c1)
+import segmentation_models_pytorch as smp
 
-    c2 = layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p1)
-    c2 = layers.Dropout(0.1)(c2)
-    c2 = layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c2)
-    p2 = layers.MaxPooling2D((2, 2))(c2)
+class_labels = {0: "no landslide", 1: "landslide"}
+segmentation_classes = ["nld", "ld"]
+def labels():
+    l = {}
+    for i, label in enumerate(segmentation_classes):
+        l[i] = label
+    return l
 
-    c3 = layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p2)
-    c3 = layers.Dropout(0.1)(c3)
-    c3 = layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c3)
-    p3 = layers.MaxPooling2D((2, 2))(c3)
+def wandb_mask(bg_img, pred_mask, true_mask):
+    return wandb.Image(bg_img, masks={
+        "prediction" : {
+            "mask_data" : pred_mask, 
+            "class_labels" : labels()
+        },
+        "ground truth" : {
+            "mask_data" : true_mask, 
+            "class_labels" : labels()
+        }})
 
-    c4 = layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p3)
-    c4 = layers.Dropout(0.1)(c4)
-    c4 = layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c4)
-    p4 = layers.MaxPooling2D((2, 2))(c4)
+class unet_model(nn.Module):
+    def __init__(self, in_channels, out_channels, num_classes):
+        super(unet_model, self).__init__()
+        self.model = smp.Unet(
+            encoder_name="mobilenet_v2",        # resnet34 # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_weights="imagenet",     # use `imagenet` pretrained weights for encoder initialization
+            in_channels=in_channels,        # model input channels (1 for grayscale images, 3 for RGB, etc.)
+            classes=num_classes,            # model output channels (number of classes in your dataset)
+        )
 
-    c5 = layers.Conv2D(256, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p4)
-    c5 = layers.Dropout(0.1)(c5)
-    c5 = layers.Conv2D(256, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c5)
+    def forward(self, x):
+        return self.model(x)
 
-    # Expsansive path
-    u6 = layers.Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same')(c5)
-    u6 = layers.concatenate([u6, c4])
-    c6 = layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u6)
-    c6 = layers.Dropout(0.1)(c6)
-    c6 = layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c6)
+class LandslideModel(pl.LightningModule):
 
-    u7 = layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same')(c6)
-    u7 = layers.concatenate([u7, c3])
-    c7 = layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u7)
-    c7 = layers.Dropout(0.1)(c7)
-    c7 = layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c7)
+    def __init__(self):
+        super(LandslideModel, self).__init__()
+        # unet_model(128, 128, 15) # Asume que unet_model devuelve una instancia de un modelo PyTorch
+        self.model = unet_model(14, 1, 1)
+        self.criterion = nn.BCEWithLogitsLoss() # Asume que estás usando la pérdida de entropía cruzada binaria
 
-    u8 = layers.Conv2DTranspose(32, (2, 2), strides=(2, 2), padding='same')(c7)
-    u8 = layers.concatenate([u8, c2])
-    c8 = layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u8)
-    c8 = layers.Dropout(0.1)(c8)
-    c8 = layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c8)
+        self.train_f1 = torchmetrics.F1Score(task='binary')
+        self.val_f1 = torchmetrics.F1Score(task='binary')
 
-    u9 = layers.Conv2DTranspose(16, (2, 2), strides=(2, 2), padding='same')(c8)
-    u9 = layers.concatenate([u9, c1])
-    c9 = layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u9)
-    c9 = layers.Dropout(0.1)(c9)
-    c9 = layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c9)
+        self.train_precision = torchmetrics.Precision(task='binary')
+        self.val_precision = torchmetrics.Precision(task='binary')
 
-    outputs = layers.Conv2D(1, (1, 1), activation='sigmoid')(c9)
+        self.train_iou = torchmetrics.JaccardIndex(task='binary')
+        self.val_iou = torchmetrics.JaccardIndex(task='binary')
 
-    model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+        # self.train_dice_loss = torchmetrics.Dice(num_classes=2)
+        # self.val_dice_loss = torchmetrics.Dice(num_classes=2)
+        
+    def forward(self, x):
+        return self.model(x)
 
-    return model
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        precision = self.train_precision(y_hat, y)
+        iou = self.train_iou(y_hat, y)
+        # loss_dice = self.train_dice_loss(y_hat, y)
+        loss = self.criterion(y_hat, y)
+        loss_f1 = self.train_f1(y_hat, y)
+        self.log('train_precision', precision)
+        self.log('train_iou', iou)
+        # self.log('train_dice_loss', loss_dice)
+        self.log('train_loss', loss)
+        self.log('train_f1', loss_f1)
+
+        # Loguear imágenes en wandb
+        if self.current_epoch % 10 == 0:  # Loguear cada 10 épocas
+            x = x[:, 1:4]
+            x = x.permute(0, 2, 3, 1)
+
+            # Loguear las primeras imágenes del lote
+            self.logger.experiment.log({
+                "image": wandb.Image(x[0].cpu().detach().numpy()*123, masks={
+                    "predictions": {
+                        "mask_data": y_hat[0][0].cpu().detach().numpy(),
+                        "class_labels": class_labels
+                    },
+                    "ground_truth": {
+                        "mask_data": y[0][0].cpu().detach().numpy(),
+                        "class_labels": class_labels
+                    }
+                })
+            })
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+
+        precision = self.val_precision(y_hat, y)
+        iou = self.val_iou(y_hat, y)
+        # loss_dice = self.val_dice_loss(y_hat, y)
+        loss = self.criterion(y_hat, y)
+        loss_f1 = self.val_f1(y_hat, y)
+        self.log('val_precision', precision)
+        self.log('val_iou', iou)
+        # self.log('val_dice_loss', loss_dice)
+        self.log('val_loss', loss)
+        self.log('val_f1', loss_f1)
+
+        # Loguear imágenes en wandb
+        if self.current_epoch % 10 == 0:  # Loguear cada 10 épocas
+            x = x[:, 1:4]
+            x = x.permute(0, 2, 3, 1)
+
+            # Loguear las primeras imágenes del lote
+            self.logger.experiment.log({
+                "image": wandb.Image(x[0].cpu().detach().numpy()*123, masks={
+                    "predictions": {
+                        "mask_data": y_hat[0][0].cpu().detach().numpy(),
+                        "class_labels": class_labels
+                    },
+                    "ground_truth": {
+                        "mask_data": y[0][0].cpu().detach().numpy(),
+                        "class_labels": class_labels
+                    }
+                })
+            })
+        return loss
+
+    def configure_optimizers(self):
+        return Adam(self.parameters(), lr=0.001)
