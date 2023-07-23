@@ -2,6 +2,7 @@
 __pycache__
 *.txt
 *.pth
+*.h5
 *.ckpt
 exp/*
 *.sh
@@ -19,3 +20,4 @@ lightning_logs/*
 wandb/
 models/
 data/
+lightning_logs/

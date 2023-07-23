@@ -5,10 +5,9 @@ from torch.optim import Adam
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 import torchmetrics
+import segmentation_models_pytorch as smp
 
 import wandb
-
-import segmentation_models_pytorch as smp
 
 class_labels = {0: "no landslide", 1: "landslide"}
 segmentation_classes = ["nld", "ld"]
@@ -33,7 +32,7 @@ class unet_model(nn.Module):
     def __init__(self, in_channels, out_channels, num_classes):
         super(unet_model, self).__init__()
         self.model = smp.Unet(
-            encoder_name="mobilenet_v2",        # resnet34 # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_name="resnet34",        # resnet34 # choose encoder, e.g. mobilenet_v2 | efficientnet-b7 | mobilenet_v2
             encoder_weights="imagenet",     # use `imagenet` pretrained weights for encoder initialization
             in_channels=in_channels,        # model input channels (1 for grayscale images, 3 for RGB, etc.)
             classes=num_classes,            # model output channels (number of classes in your dataset)
@@ -43,7 +42,6 @@ class unet_model(nn.Module):
         return self.model(x)
 
 class LandslideModel(pl.LightningModule):
-
     def __init__(self):
         super(LandslideModel, self).__init__()
         # unet_model(128, 128, 15) # Asume que unet_model devuelve una instancia de un modelo PyTorch
