@@ -7,7 +7,8 @@ from dataset import DatasetLandslide
 from model import LandslideModel
 
 # Path: scripts_pl/dataset.py
-data_path = '/home/ryali93/Desktop/l4s/data/TrainData'
+# data_path = '/home/ryali93/Desktop/l4s/data/TrainData'
+data_path = '/home/tidop/Desktop/projects/l4s/data/TrainData'
 
 # load dataset
 dataset = DatasetLandslide(data_path)

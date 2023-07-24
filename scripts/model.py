@@ -31,21 +31,40 @@ def wandb_mask(bg_img, pred_mask, true_mask):
 class unet_model(nn.Module):
     def __init__(self, in_channels, out_channels, num_classes):
         super(unet_model, self).__init__()
+        self.conv = nn.Conv2d(in_channels, 3, kernel_size=1)
         self.model = smp.Unet(
-            encoder_name="resnet34",        # resnet34 # choose encoder, e.g. mobilenet_v2 | efficientnet-b7 | mobilenet_v2
+            encoder_name="mit_b0",        # resnet34 # choose encoder, e.g. mobilenet_v2 | efficientnet-b7 | mobilenet_v2
             encoder_weights="imagenet",     # use `imagenet` pretrained weights for encoder initialization
-            in_channels=in_channels,        # model input channels (1 for grayscale images, 3 for RGB, etc.)
+            in_channels=3,        # model input channels (1 for grayscale images, 3 for RGB, etc.)
             classes=num_classes,            # model output channels (number of classes in your dataset)
         )
 
     def forward(self, x):
+        x = self.conv(x)
+        return self.model(x)
+
+class fpn_model(nn.Module):
+    def __init__(self, in_channels, out_channels, num_classes):
+        super(fpn_model, self).__init__()
+        self.conv = nn.Conv2d(in_channels, 3, kernel_size=1) # Convierte de 14 a 3 canales usando un kernel de tamaño 1
+
+        self.model = smp.FPN(
+            encoder_name="mit_b2",          # 
+            encoder_weights="imagenet",     # use `imagenet` pretrained weights for encoder initialization
+            in_channels=3,        # model input channels (1 for grayscale images, 3 for RGB, etc.)
+            classes=num_classes,            # model output channels (number of classes in your dataset)
+        )
+
+    def forward(self, x):
+        x = self.conv(x)
         return self.model(x)
 
 class LandslideModel(pl.LightningModule):
     def __init__(self):
         super(LandslideModel, self).__init__()
         # unet_model(128, 128, 15) # Asume que unet_model devuelve una instancia de un modelo PyTorch
-        self.model = unet_model(14, 1, 1)
+        # self.model = unet_model(14, 1, 1)
+        self.model = unet_model(6, 1, 1)
         self.criterion = nn.BCEWithLogitsLoss() # Asume que estás usando la pérdida de entropía cruzada binaria
 
         self.train_f1 = torchmetrics.F1Score(task='binary')
@@ -84,7 +103,7 @@ class LandslideModel(pl.LightningModule):
 
             # Loguear las primeras imágenes del lote
             self.logger.experiment.log({
-                "image": wandb.Image(x[0].cpu().detach().numpy()*123, masks={
+                "image": wandb.Image(x[0].cpu().detach().numpy()*255, masks={
                     "predictions": {
                         "mask_data": y_hat[0][0].cpu().detach().numpy(),
                         "class_labels": class_labels
@@ -120,7 +139,7 @@ class LandslideModel(pl.LightningModule):
 
             # Loguear las primeras imágenes del lote
             self.logger.experiment.log({
-                "image": wandb.Image(x[0].cpu().detach().numpy()*123, masks={
+                "image": wandb.Image(x[0].cpu().detach().numpy()*255, masks={
                     "predictions": {
                         "mask_data": y_hat[0][0].cpu().detach().numpy(),
                         "class_labels": class_labels

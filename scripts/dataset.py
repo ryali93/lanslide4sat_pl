@@ -42,41 +42,6 @@ norm_dicc = {
 def normalize_minmax(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
 
-# class DatasetLandslide(Dataset):
-#     def __init__(self, path):
-#         self.train_paths, self.mask_paths = self.read_data(path)
-#         self.train_data, self.mask_data = self.config_data(self.train_paths, self.mask_paths)
-
-#     def read_data(self, path):
-#         TRAIN_PATH = f"{path}/img/*.h5" # data_val
-#         TRAIN_MASK = f'{path}/mask/*.h5' # data_val
-#         all_train = sorted(glob.glob(TRAIN_PATH))
-#         all_mask = sorted(glob.glob(TRAIN_MASK))
-#         return all_train, all_mask
-
-#     def config_data(self, all_train, all_mask):
-#         n_imgs = len(all_train)
-#         TRAIN_XX = np.zeros((n_imgs, 14, 128, 128)) # PyTorch utiliza el formato (N, C, H, W)
-#         TRAIN_YY = np.zeros((n_imgs, 1, 128, 128))  # PyTorch utiliza el formato (N, C, H, W)
-#         for i, (img, mask) in enumerate(zip(all_train, all_mask)):
-#             with h5py.File(img) as hdf:
-#                 data = np.array(hdf.get('img'))
-#                 data[np.isnan(data)] = 0.000001
-#                 TRAIN_XX[i, :, :, :] = data.transpose((2, 0, 1)) # Transponemos para tener (C, H, W)
-    
-#             with h5py.File(mask) as hdf:
-#                 data=np.array(hdf.get('mask'))
-#                 TRAIN_YY[i, :, :] = data
-
-#         TRAIN_XX[np.isnan(TRAIN_XX)] = 0.000001
-#         return torch.from_numpy(TRAIN_XX).float(), torch.from_numpy(TRAIN_YY).float() # Convertimos a tensores de PyTorch
-
-#     def __len__(self):
-#         return len(self.train_data)
-
-#     def __getitem__(self, idx):
-#         return self.train_data[idx], self.mask_data[idx]
-
 class DatasetLandslide(Dataset):
     def __init__(self, path):
         self.train_paths, self.mask_paths = self.read_data(path)
@@ -92,15 +57,25 @@ class DatasetLandslide(Dataset):
         return len(self.train_paths)
 
     def __getitem__(self, idx):
+        TRAIN_XX = np.zeros((128, 128, 6))
         with h5py.File(self.train_paths[idx]) as hdf:
             data = np.array(hdf.get('img'))
             data[np.isnan(data)] = 0.000001
-            img = data.transpose((2, 0, 1))  # Transponemos para tener (C, H, W)
+            
+            # data_red = data[:, :, 3]
+            # data_nir = data[:, :, 7]
+            # data_ndvi = np.divide(data_nir - data_red, np.add(data_nir, data_red))
+
+            TRAIN_XX[:, :, 0] = data[:, :, 1]
+            TRAIN_XX[:, :, 1] = data[:, :, 2]
+            TRAIN_XX[:, :, 2] = data[:, :, 3]
+            TRAIN_XX[:, :, 3] = data[:, :, 4]
+            TRAIN_XX[:, :, 4] = data[:, :, 12]
+            TRAIN_XX[:, :, 5] = data[:, :, 13]
+            # TRAIN_XX[:, :, 6] = data_ndvi
+
+            img = TRAIN_XX.transpose((2, 0, 1))  # Transponemos para tener (C, H, W)
             img = normalize_minmax(img)
-            # if "image_" in self.train_paths[idx]:
-            #     img = normalize_minmax(img)
-            # else:
-            #     img = img[0:3]
 
         with h5py.File(self.mask_paths[idx]) as hdf:
             mask = np.array(hdf.get('mask'))
