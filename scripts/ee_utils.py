@@ -2,6 +2,9 @@ import time
 import ee
 import geemap
 import tensorflow as tf
+import torch
+from typing import List
+import torchdata.datapipes.iter as dp
 from google.cloud import storage
 
 ee.Initialize()
@@ -114,26 +117,44 @@ def download_imgs_to_gcs(data, area, bucket_name, prefix, monitor=False):
             time.sleep(5)
 
 
-def predict_input_fn(fileNames, side, bands):
+# def predict_input_fn(fileNames, side, bands):
 
-  # Read `TFRecordDatasets`
-  dataset = tf.data.TFRecordDataset(fileNames, compression_type='GZIP')
-  featuresDict = {x:tf.io.FixedLenFeature([side, side], dtype=tf.float32) for x in bands}
+#   # Read `TFRecordDatasets`
+#   dataset = tf.data.TFRecordDataset(fileNames, compression_type='GZIP')
+#   featuresDict = {x:tf.io.FixedLenFeature([side, side], dtype=tf.float32) for x in bands}
 
-  # Make a parsing function
-  def parse_image(example_proto):
-    parsed_features = tf.io.parse_single_example(example_proto, featuresDict)
-    return parsed_features
+#   # Make a parsing function
+#   def parse_image(example_proto):
+#     parsed_features = tf.io.parse_single_example(example_proto, featuresDict)
+#     return parsed_features
 
-  def stack_images(features):
-    nfeat = tf.transpose(tf.squeeze(tf.stack(list(features.values()))))
-    return nfeat
+#   def stack_images(features):
+#     nfeat = tf.transpose(tf.squeeze(tf.stack(list(features.values()))))
+#     return nfeat
 
-  dataset = dataset.map(parse_image, num_parallel_calls=4)
-  dataset = dataset.map(stack_images, num_parallel_calls=4)
-  dataset = dataset.batch(side*side)
-  return dataset
+#   dataset = dataset.map(parse_image, num_parallel_calls=4)
+#   dataset = dataset.map(stack_images, num_parallel_calls=4)
+#   dataset = dataset.batch(side*side)
+#   return dataset
 
+
+def predict_input_fn(fileNames: List[str], side: int, bands: List[str]) -> dp.IterDataPipe:
+    # Define la especificación para decodificar el TFRecord
+    spec = { band: (torch.float32, (side, side)) for band in bands } 
+    # Crea un DataPipe que emite rutas de archivo
+    files_dp = dp.FileLister(fileNames)
+    # Carga y decodifica los TFRecords
+    tfrecord_dp = dp.TFRecordLoader(files_dp, spec=spec)
+    return tfrecord_dp
+
+# def predict_input_fn(fileNames: List[str], side: int, bands: List[str]) -> dp.IterDataPipe:
+#     # Define la especificación para decodificar el TFRecord
+#     spec = { band: (torch.float32, (side, side)) for band in bands } 
+#     # Aquí, en lugar de usar la ruta de GCS, utiliza el local_path
+#     files_dp = dp.FileLister([local_path])  # Asegúrate de que sea una lista
+#     # Carga y decodifica los TFRecords
+#     tfrecord_dp = dp.TFRecordLoader(files_dp, spec=spec)
+#     return tfrecord_dp
 
 
 def ingest_gee(outputAssetId, gcs_image_uri, mixer):
