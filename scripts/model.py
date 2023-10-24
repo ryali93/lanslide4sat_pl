@@ -48,8 +48,8 @@ class LandslideModel(pl.LightningModule):
     """Clase para el modelo de segmentación de deslizamientos de tierra."""
     def __init__(self, alpha=0.5):
         super(LandslideModel, self).__init__()
-        self.model = unet_model(14, 1, 1)
-        # self.model = UNet(14, 1)
+        # self.model = unet_model(14, 1, 1)
+        self.model = UNet(6, 1)
 
         self.weights = torch.tensor([5], dtype=torch.float32).to(self.device)
         self.alpha = alpha  # Asignar valor de alpha desde argumentos

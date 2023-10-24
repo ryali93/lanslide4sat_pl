@@ -93,3 +93,40 @@ class DatasetLandslide(Dataset):
                 mask = mask[np.newaxis, :]  # Añadir dimensión de canal
 
         return torch.from_numpy(img).float(), torch.from_numpy(mask).float()  # Convertimos a tensores de PyTorch
+
+
+class DatasetLandslideEval(Dataset):
+    def __init__(self, parches, mascaras=None):
+        """
+        Initializes the DatasetLandslide class.
+        Args:
+        - parches (list): A list of image patches.
+        - mascaras (list, optional): A list of corresponding mask patches. Default is None.
+        """
+        self.parches = parches
+        # self.mascaras = mascaras if mascaras is not None else [np.zeros_like(parches[0][0, :, :]) for _ in parches]
+
+    def __len__(self):
+        """
+        Returns the length of the dataset.
+        Returns:
+        - len (int): The length of the dataset.
+        """
+        return len(self.parches)
+
+    def __getitem__(self, idx):
+        """
+        Returns the item at the given index.
+        Args:
+        - idx (int): The index of the item to return.
+        Returns:
+        - img (torch.Tensor): The image data as a PyTorch tensor.
+        - mask (torch.Tensor): The mask data as a PyTorch tensor.
+        """
+        img = self.parches[idx].astype(np.float32)
+        # mask = self.mascaras[idx].astype(np.float32)
+
+        # Aquí puedes aplicar cualquier preprocesamiento necesario a img y mask
+        img = normalize_minmax(img)
+
+        return torch.from_numpy(img)#, torch.from_numpy(mask)
