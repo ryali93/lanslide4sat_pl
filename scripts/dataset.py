@@ -56,36 +56,36 @@ class DatasetLandslide(Dataset):
         - img (torch.Tensor): The image data as a PyTorch tensor.
         - mask (torch.Tensor): The mask data as a PyTorch tensor.
         """
-        # TRAIN_XX = np.zeros((128, 128, 6))
-        TRAIN_XX = np.zeros((128, 128, 14))
+        TRAIN_XX = np.zeros((128, 128, 6))
+        # TRAIN_XX = np.zeros((128, 128, 14))
         with h5py.File(self.train_paths[idx]) as hdf:
             data = np.array(hdf.get('img'))
             data[np.isnan(data)] = 0.000001
 
-            # TRAIN_XX[:, :, 0] = data[:, :, 1]
-            # TRAIN_XX[:, :, 1] = data[:, :, 2]
-            # TRAIN_XX[:, :, 2] = data[:, :, 3]
-            # TRAIN_XX[:, :, 3] = data[:, :, 7]
-            # TRAIN_XX[:, :, 4] = data[:, :, 12]
-            # TRAIN_XX[:, :, 5] = data[:, :, 13]
-            TRAIN_XX[:, :, 0] = data[:, :, 0]
-            TRAIN_XX[:, :, 1] = data[:, :, 1]
-            TRAIN_XX[:, :, 2] = data[:, :, 2]
-            TRAIN_XX[:, :, 3] = data[:, :, 3]
-            TRAIN_XX[:, :, 4] = data[:, :, 4]
-            TRAIN_XX[:, :, 5] = data[:, :, 5]
-            TRAIN_XX[:, :, 6] = data[:, :, 6]
-            TRAIN_XX[:, :, 7] = data[:, :, 7]
-            TRAIN_XX[:, :, 8] = data[:, :, 8]
-            TRAIN_XX[:, :, 9] = data[:, :, 9]
-            TRAIN_XX[:, :, 10] = data[:, :, 10]
-            TRAIN_XX[:, :, 11] = data[:, :, 11]
-            TRAIN_XX[:, :, 12] = data[:, :, 12]
-            TRAIN_XX[:, :, 13] = data[:, :, 13]
+            TRAIN_XX[:, :, 0] = data[:, :, 1]
+            TRAIN_XX[:, :, 1] = data[:, :, 2]
+            TRAIN_XX[:, :, 2] = data[:, :, 3]
+            TRAIN_XX[:, :, 3] = data[:, :, 7]
+            TRAIN_XX[:, :, 4] = data[:, :, 12]
+            TRAIN_XX[:, :, 5] = data[:, :, 13]
+            # TRAIN_XX[:, :, 0] = data[:, :, 0]
+            # TRAIN_XX[:, :, 1] = data[:, :, 1]
+            # TRAIN_XX[:, :, 2] = data[:, :, 2]
+            # TRAIN_XX[:, :, 3] = data[:, :, 3]
+            # TRAIN_XX[:, :, 4] = data[:, :, 4]
+            # TRAIN_XX[:, :, 5] = data[:, :, 5]
+            # TRAIN_XX[:, :, 6] = data[:, :, 6]
+            # TRAIN_XX[:, :, 7] = data[:, :, 7]
+            # TRAIN_XX[:, :, 8] = data[:, :, 8]
+            # TRAIN_XX[:, :, 9] = data[:, :, 9]
+            # TRAIN_XX[:, :, 10] = data[:, :, 10]
+            # TRAIN_XX[:, :, 11] = data[:, :, 11]
+            # TRAIN_XX[:, :, 12] = data[:, :, 12]
+            # TRAIN_XX[:, :, 13] = data[:, :, 13]
 
             img = TRAIN_XX.transpose((2, 0, 1))  # Transponemos para tener (C, H, W)
-            img = normalize_minmax(img)
-
+            # img = normalize_minmax(img)
+# 
         mask = np.array([])
         if self.mask_paths != []:
             with h5py.File(self.mask_paths[idx]) as hdf:
@@ -127,6 +127,6 @@ class DatasetLandslideEval(Dataset):
         # mask = self.mascaras[idx].astype(np.float32)
 
         # Aquí puedes aplicar cualquier preprocesamiento necesario a img y mask
-        img = normalize_minmax(img)
+        # img = normalize_minmax(img)
 
         return torch.from_numpy(img)#, torch.from_numpy(mask)

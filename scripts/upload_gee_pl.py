@@ -16,7 +16,7 @@ def get_model(model_path):
 
 def main():
     # 1. Read model
-    model = get_model("model_resnet34_6b_ns")
+    model = get_model("model_vanilla_6b_l4s")
 
     bucket_name = 'rgee_dev'
     folder_name = 'tesis'
@@ -52,5 +52,6 @@ def main():
     NAME_OUT = 'ld_out_predictions'
     outputAssetID = f'users/{USER_NAME}/{NAME_OUT}'
     print('Writing to ' + outputAssetID)
+
 if __name__ == "__main__":
     main()

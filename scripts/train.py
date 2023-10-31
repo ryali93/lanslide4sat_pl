@@ -44,8 +44,7 @@ def train():
     early_stop_callback = EarlyStopping(monitor='val_loss', patience=10, mode='min')
     trainer = Trainer(max_epochs=100, logger=wandb_logger, callbacks=[checkpoint_callback, early_stop_callback])
     trainer.fit(model, train_dataloader, val_dataloader)
-    trainer.save_checkpoint("models/unet_resnet34_14b_full_2.ckpt")
-    trainer.save_checkpoint("models/unet_resnet34_14b_full_2.pth")
+    trainer.save_checkpoint("models_n/unet_vanilla_6b_full_nn.ckpt")
 
 if __name__ == '__main__':
         train()
