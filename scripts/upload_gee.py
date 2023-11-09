@@ -1,24 +1,29 @@
 import rasterio
+from rasterio.enums import Resampling
+from rasterio.warp import calculate_default_transform, reproject
 import numpy as np
 import scipy.ndimage
 from google.cloud import storage
-from rasterio.enums import Resampling
-from rasterio.warp import calculate_default_transform, reproject
 from torch.utils.data import DataLoader
 from dataset import DatasetLandslideEval
 from model import LandslideModel
 import torch
+import os
 
 def descargar_blob(bucket_name, source_blob_name, destination_file_name):
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(source_blob_name)
-    blob.download_to_filename(destination_file_name)
-    print("Blob {} downloaded to {}.".format(source_blob_name, destination_file_name))
-    
+    if os.path.exists(destination_file_name):
+        print("File {} already exists. Skipping download.".format(destination_file_name))
+        return
+    else:
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(source_blob_name)
+        blob.download_to_filename(destination_file_name)
+        print("Blob {} downloaded to {}.".format(source_blob_name, destination_file_name))
+
 def resample(to_path, from_path):
     with rasterio.open(to_path) as to_, rasterio.open(from_path) as from_:
-        # Checar si los sistemas de coordenadas son iguales
+        # Revisar si los sistemas de coordenadas son iguales
         if to_.crs != from_.crs:
             transform, width, height = calculate_default_transform(
                 to_.crs, from_.crs, to_.width, to_.height, *to_.bounds)
@@ -29,16 +34,17 @@ def resample(to_path, from_path):
                 'width': width,
                 'height': height
             })
-            hasta_resam = rasterio.open('/tmp/hasta_resam.tif', 'w', **kwargs)
-            for i in range(1, to_.count + 1):
-                reproject(
-                    source=rasterio.band(to_, i),
-                    destination=rasterio.band(hasta_resam, i),
-                    src_transform=to_.transform,
-                    src_crs=to_.crs,
-                    dst_transform=transform,
-                    dst_crs=from_.crs,
-                    resampling=Resampling.nearest)
+            with rasterio.open('/tmp/hasta_resam.tif', 'w', **kwargs) as hasta_resam:
+                for i in range(1, to_.count + 1):
+                    reproject(
+                        source=rasterio.band(to_, i),
+                        destination=rasterio.band(hasta_resam, i),
+                        src_transform=to_.transform,
+                        src_crs=to_.crs,
+                        dst_transform=transform,
+                        dst_crs=from_.crs,
+                        resampling=Resampling.nearest)
+            hasta_resam = rasterio.open('/tmp/hasta_resam.tif', 'r')
         else:
             hasta_resam = to_
 
@@ -59,6 +65,7 @@ def resample(to_path, from_path):
             'transform': transform
         })
         return data
+
 
 # def split_in_patches(image_data, size=128):
 #     n_bandas, width, height = image_data.shape
@@ -222,20 +229,22 @@ def guardar_prediccion_como_geotiff(input_path, output_path, prediction):
 def main():
     # Bucket config
     bucket_name = 'rgee_dev' # GCS
-    set_dir = "test_upload6/" # Local
-    s2_source_blob_name = 'tesis/ld_s2_6b_2022_aoi6.tif'
-    ap_source_blob_name = 'tesis/ld_ap_aoi6.tif'
-    s2_path = set_dir + 'ld_s2_6b_2022_aoi6.tif'
-    ap_path = set_dir + 'ld_ap_aoi6.tif'
-    output_path = 'test_upload6/pred_vanilla_6b_2022_aoi6_sf.tif'
+    set_dir = "test_upload8/" # Local
+    s2_source_blob_name = 'tesis/ld_s2_6b_2019_aoi8.tif'
+    ap_source_blob_name = 'tesis/ld_ap_aoi8.tif'
+    s2_path = set_dir + 'ld_s2_6b_2019_aoi8.tif'
+    ap_path = set_dir + 'ld_ap_aoi8.tif'
+    output_path = 'test_upload8/pred_vanilla_6b_2019_aoi8.tif'
 
     # model_path = 'models_n/unet_vanilla_6b_l4spe_nn_1.ckpt'
     # model_path = 'models_n/unet_resnet34_6b_l4spe_nn.ckpt'
-    model_path = 'models/unet_segformer1_6b_full.ckpt'
+    # model_path = 'models/unet_segformer1_6b_full.ckpt'
+    # model_path = 'models/unet_resnet34_14b_full_2.ckpt'
     # model_path = 'models/unet_mobilenetv2_6b_full.ckpt'
+    model_path = 'models/unet_vanilla_6b_full.ckpt'
 
-    # descargar_blob(bucket_name, s2_source_blob_name, s2_path)
-    # descargar_blob(bucket_name, ap_source_blob_name, ap_path)
+    descargar_blob(bucket_name, s2_source_blob_name, s2_path)
+    descargar_blob(bucket_name, ap_source_blob_name, ap_path)
 
     d_s2 = rasterio.open(s2_path).read()
     ap_resamp = resample(ap_path, s2_path)

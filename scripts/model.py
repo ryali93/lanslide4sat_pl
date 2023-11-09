@@ -20,9 +20,9 @@ class unet_model(nn.Module):
         super(unet_model, self).__init__()
         self.conv = nn.Conv2d(in_channels, 3, kernel_size=1)
         self.model = smp.Unet(
-            encoder_name="mit_b0",          # resnet34, mobilenet_v2, efficientnet-b7, mit_b0
+            encoder_name="mit_b0",#"resnet34",          # resnet34, mobilenet_v2, efficientnet-b7, mit_b0
             encoder_weights="imagenet",     # use `imagenet` pretrained weights for encoder initialization
-            in_channels=3,#in_channels,                  # model input channels (1 for grayscale images, 3 for RGB, etc.)
+            in_channels=3,#3,#in_channels,                  # model input channels (1 for grayscale images, 3 for RGB, etc.)
             classes=num_classes,            # model output channels (number of classes in your dataset)
         )
 
@@ -48,8 +48,8 @@ class LandslideModel(pl.LightningModule):
     """Clase para el modelo de segmentación de deslizamientos de tierra."""
     def __init__(self, alpha=0.5):
         super(LandslideModel, self).__init__()
-        self.model = unet_model(6, 1, 1)
-        # self.model = UNet(6, 1)
+        # self.model = unet_model(6, 1, 1)
+        self.model = UNet(6, 1)
 
         self.weights = torch.tensor([5], dtype=torch.float32).to(self.device)
         self.alpha = alpha  # Asignar valor de alpha desde argumentos

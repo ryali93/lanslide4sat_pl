@@ -55,7 +55,7 @@ def apply_cld_shdw_mask(img):
 
 
 def get_s2_sr_cld_col(aoi, start_date, end_date, cloud_filter):
-    s2_sr_col = (ee.ImageCollection('COPERNICUS/S2_SR')
+    s2_sr_col = (ee.ImageCollection('COPERNICUS/S2')
         .filterBounds(aoi)
         .filterDate(start_date, end_date)
         .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', cloud_filter)))
@@ -103,9 +103,10 @@ def process_alos_palsar_images(aoi):
 
 def process_sentinel2_images(aoi, start_date, end_date, bands, cloud_filter):
     s2_sr_cld_col = get_s2_sr_cld_col(aoi, start_date, end_date, cloud_filter)
-    s2_sr_median = (s2_sr_cld_col.map(add_cld_shdw_mask)
-                                .map(apply_cld_shdw_mask)
-                                .median())
+    # s2_sr_median = (s2_sr_cld_col.map(add_cld_shdw_mask)
+    #                             .map(apply_cld_shdw_mask)
+    #                             .median())
+    s2_sr_median = s2_sr_cld_col.first()
     d_s2 = s2_sr_median.clip(aoi).select(bands).toFloat()
     # d_s2 = s2_sr_median.select("B1","B2","B3","B4","B5","B6","B7","B8","B9","B10","B11","B12").clip(aoi).toFloat()
     return d_s2
@@ -136,23 +137,26 @@ def download_image_from_gcs(bucket_name, source_blob_name, destination_file_name
     blob.download_to_filename(destination_file_name)
 
 def main():
-    start_date = '2022-09-01'
-    end_date = '2022-10-30'
+    #'2019-06-01', '2019-06-30'
+    start_date = '2019-06-01'
+    end_date = '2019-06-30'
     # xmin, ymin, xmax, ymax = [-75.583,-10.813,-75.317,-10.637]
     # xmin, ymin, xmax, ymax = [-75.621,-10.520,-75.400,-10.338]
     # xmin, ymin, xmax, ymax = [-75.684,-10.457,-75.466,-10.272]
-    xmin, ymin, xmax, ymax = [-75.359,-10.879,-75.221,-10.790]
+    # xmin, ymin, xmax, ymax = [-75.359,-10.879,-75.221,-10.790]
+    # xmin, ymin, xmax, ymax = [-75.334,-10.973,-75.295,-10.935] # aoi 7
+    xmin, ymin, xmax, ymax = [-75.390,-11.292,-75.344,-11.250] # aoi 8
     bands = ['B2','B3','B4','B8']
     # xmin, ymin, xmax, ymax = [-75.249597, -10.770447, -74.966013, -10.503883]
     aoi = define_aoi(xmin, ymin, xmax, ymax)
-    cloud_filter = 30
+    cloud_filter = 100
     dataset_s2 = process_sentinel2_images(aoi, start_date, end_date, bands, cloud_filter)
     dataset_ap = process_alos_palsar_images(aoi)
 
     output_bucket = 'rgee_dev'
     
-    file_prefix_s2 = 'tesis/ld_s2_6b_2022_aoi6'
-    file_prefix_ap = 'tesis/ld_ap_aoi6'
+    file_prefix_s2 = 'tesis/ld_s2_6b_2019_aoi8'
+    file_prefix_ap = 'tesis/ld_ap_aoi8'
     scale_s2 = 10
     scale_ap = 12.5
 
@@ -160,9 +164,6 @@ def main():
     monitor_task(task)
     # task = export_to_cloud_storage(dataset_ap, output_bucket, file_prefix_ap, aoi, scale_ap)
     # monitor_task(task)  
-
-    # download_image_from_gcs('rgee_dev', 'tesis4/ld_2019.tif', '/tmp/ld_2019.tif')
-    # download_image_from_gcs('rgee_dev', 'tesis4/ld_2019_ap.tif', '/tmp/ld_2019_ap.tif')
 
 if __name__ == "__main__":
     main()
