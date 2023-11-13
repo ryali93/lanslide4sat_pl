@@ -8,54 +8,70 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 import torchmetrics
 import segmentation_models_pytorch as smp
-
 import wandb
+import yaml
 
 class_labels = {0: "no landslide", 1: "landslide"}
-    
-# Definición del modelo U-Net
-class unet_model(nn.Module):
-    """Clase para el modelo U-Net."""
-    def __init__(self, in_channels, out_channels, num_classes):
-        super(unet_model, self).__init__()
+
+with open('config.yaml', 'r') as file:
+    config = yaml.safe_load(file)
+
+class smp_model(nn.Module):
+    """
+    A PyTorch module that defines a segmentation model using the `smp` library.
+
+    Args:
+        in_channels (int): Number of input channels.
+        out_channels (int): Number of output channels.
+        model_type (str): Type of encoder to use. Can be one of 'resnet34', 'mobilenet_v2', or 'mit_b0'.
+        num_classes (int): Number of classes in the dataset.
+        encoder_weights (str): Type of weights to use for encoder initialization. Can be one of 'imagenet' or 'None'.
+    """
+    def __init__(self, in_channels, out_channels, model_type, num_classes, encoder_weights):
+        super(smp_model, self).__init__()
         self.conv = nn.Conv2d(in_channels, 3, kernel_size=1)
         self.model = smp.Unet(
-            encoder_name="mit_b0",#"resnet34",          # resnet34, mobilenet_v2, efficientnet-b7, mit_b0
-            encoder_weights="imagenet",     # use `imagenet` pretrained weights for encoder initialization
-            in_channels=3,#3,#in_channels,                  # model input channels (1 for grayscale images, 3 for RGB, etc.)
-            classes=num_classes,            # model output channels (number of classes in your dataset)
+            encoder_name = model_type,          # resnet34, mobilenet_v2, mit_b0
+            encoder_weights = encoder_weights,  # use `imagenet` pretrained weights for encoder initialization
+            in_channels = in_channels,          # model input channels (in_channels as default, 3 for mit_b0)
+            classes = num_classes,              # model output channels (number of classes in your dataset)
         )
 
     def forward(self, x):
-        x = self.conv(x)
+        if config['model_config']['model_type'] == 'mit_b0': x = self.conv(x)
         x = self.model(x)
-        return x  # No aplicar sigmoide aquí porque estamos usando BCEWithLogitsLoss
+        return x
 
-# Función de pérdida Dice personalizada
-def dice_loss(y_hat, y):
-    """Calcula la pérdida de Dice."""
-    smooth = 1e-6
-    y_hat = y_hat.view(-1)
-    y = y.view(-1)
-    intersection = (y_hat * y).sum()
-    union = y_hat.sum() + y.sum()
-    dice = (2 * intersection + smooth) / (union + smooth)
-    return 1 - dice
-
-
-# Modelo principal para segmentación de deslizamientos de tierra
 class LandslideModel(pl.LightningModule):
-    """Clase para el modelo de segmentación de deslizamientos de tierra."""
+    """
+    A PyTorch Lightning module for training a Landslide segmentation model.
+
+    Args:
+        alpha (float): The weight given to the Dice loss in the combined loss function. Default is 0.5.
+    """
     def __init__(self, alpha=0.5):
         super(LandslideModel, self).__init__()
+
+        model_type = config['model_config']['model_type']
+        in_channels = config['model_config']['in_channels']
+        num_classes = config['model_config']['num_classes']
+
+        if model_type == 'unet':
+            self.model = UNet(in_channels=in_channels, out_channels=num_classes)
+        else:
+            encoder_weights = config['model_config']['encoder_weights']
+            self.model = smp_model(in_channels=in_channels, 
+                                    out_channels=num_classes, 
+                                    model_type=model_type, 
+                                    num_classes=num_classes, 
+                                    encoder_weights=encoder_weights)
         # self.model = unet_model(6, 1, 1)
-        self.model = UNet(6, 1)
+        # self.model = UNet(6, 1)
 
         self.weights = torch.tensor([5], dtype=torch.float32).to(self.device)
-        self.alpha = alpha  # Asignar valor de alpha desde argumentos
+        self.alpha = alpha  # Assign the alpha value to the class variable
 
-        # self.wce = nn.BCEWithLogitsLoss(weight=self.weights)  # BCEWithLogits ya incluye la sigmoide
-        self.wce = nn.BCELoss(weight=self.weights)  # BCEWithLogits ya incluye la sigmoide
+        self.wce = nn.BCELoss(weight=self.weights)
 
         self.train_f1 = torchmetrics.F1Score(task='binary')
         self.val_f1 = torchmetrics.F1Score(task='binary')
@@ -70,9 +86,28 @@ class LandslideModel(pl.LightningModule):
         self.val_iou = torchmetrics.JaccardIndex(task='binary')
 
     def forward(self, x):
+        """
+        Forward pass of the model.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, channels, height, width).
+
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, num_classes, height, width).
+        """
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
+        """
+        Training step of the model.
+
+        Args:
+            batch (tuple): Tuple containing input tensor and target tensor.
+            batch_idx (int): Index of the current batch.
+
+        Returns:
+            dict: Dictionary containing the loss value.
+        """
         x, y = batch
         y_hat = torch.sigmoid(self(x))
 
@@ -97,6 +132,16 @@ class LandslideModel(pl.LightningModule):
         return {'loss': combined_loss}
 
     def validation_step(self, batch, batch_idx):
+        """
+        Validation step of the model.
+
+        Args:
+            batch (tuple): Tuple containing input tensor and target tensor.
+            batch_idx (int): Index of the current batch.
+
+        Returns:
+            dict: Dictionary containing the validation loss value.
+        """
         x, y = batch
         y_hat = torch.sigmoid(self(x))
 
@@ -157,9 +202,7 @@ class LandslideModel(pl.LightningModule):
 class Block(nn.Module):
     def __init__(self, inputs = 3, middles = 64, outs = 64):
         super().__init__()
-        #self.device = device
-        #self.dropout = nn.Dropout(dropout)
-        
+                
         self.conv1 = nn.Conv2d(inputs, middles, 3, 1, 1)
         self.conv2 = nn.Conv2d(middles, outs, 3, 1, 1)
         self.relu = nn.ReLU()
@@ -167,17 +210,18 @@ class Block(nn.Module):
         self.pool = nn.MaxPool2d(2, 2)
         
     def forward(self, x):
-        
         x = self.relu(self.conv1(x))
         x = self.relu(self.bn(self.conv2(x)))
-        # x = self.pool(x)
-        
         return self.pool(x), x
-        # self.pool(x): [bs, out, h*.5, w*.5]
-    
-        # return x, e1
 
 class UNet(nn.Module):
+    """
+    Implementation of the U-Net architecture for image segmentation.
+    
+    Args:
+    - in_channels (int): number of input channels (default: 3)
+    - out_channels (int): number of output channels (default: 1)
+    """
     def __init__(self,in_channels=3, out_channels=1):
         super().__init__()
         
@@ -202,7 +246,15 @@ class UNet(nn.Module):
         self.conv_last = nn.Conv2d(64, out_channels, kernel_size=1, stride = 1, padding = 0)
         
     def forward(self, x):
+        """
+        Forward pass of the U-Net model.
         
+        Args:
+        - x (torch.Tensor): input tensor of shape (batch_size, in_channels, height, width)
+        
+        Returns:
+        - output (torch.Tensor): output tensor of shape (batch_size, out_channels, height, width)
+        """
         x, e1 = self.en1(x)
         x, e2 = self.en2(x)
         x, e3 = self.en3(x)
@@ -227,5 +279,23 @@ class UNet(nn.Module):
         
         x = self.conv_last(x)
         
-        # x = x.squeeze(1)         
         return x
+
+def dice_loss(y_hat, y):
+    """
+    Calculates the dice loss between predicted and ground truth masks.
+
+    Args:
+        y_hat (torch.Tensor): Predicted mask tensor.
+        y (torch.Tensor): Ground truth mask tensor.
+
+    Returns:
+        torch.Tensor: Dice loss value.
+    """
+    smooth = 1e-6
+    y_hat = y_hat.view(-1)
+    y = y.view(-1)
+    intersection = (y_hat * y).sum()
+    union = y_hat.sum() + y.sum()
+    dice = (2 * intersection + smooth) / (union + smooth)
+    return 1 - dice

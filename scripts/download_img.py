@@ -162,8 +162,8 @@ def main():
 
     task = export_to_cloud_storage(dataset_s2, output_bucket, file_prefix_s2, aoi, scale_s2)
     monitor_task(task)
-    # task = export_to_cloud_storage(dataset_ap, output_bucket, file_prefix_ap, aoi, scale_ap)
-    # monitor_task(task)  
+    task = export_to_cloud_storage(dataset_ap, output_bucket, file_prefix_ap, aoi, scale_ap)
+    monitor_task(task)  
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,22 @@
+model_config:
+  model_type: "resnet34"                    # resnet34 | mobilenet_v2 | mit_b0 | unet
+  in_channels: False                        # False as default | 3 for mit_b0
+  num_classes: 1
+  encoder_weights: "imagenet"               # False for unet | Only for pretrained models
+  # unet_channels: [64, 128, 256, 512, 1024]  # False for pretrained models | [64, 128, 256, 512, 1024] for unet
+
+dataset_config:
+  num_classes: 1
+  num_channels: 6                           # 14 | 6
+  channels: [1, 2, 3, 7, 12, 13]            # [1, 2, 3, 7, 12, 13] | [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 ,12, 13, 14]
+  normalize: False                          # False | True
+
+train_config:
+  dataset_path: "data/TrainData"            # Path to dataset
+  checkpoint_path: "checkpoints"            # Path to save checkpoints
+  seed: 42                                  # Random seed
+  train_val_split: 0.8                      # Train/val split
+  batch_size: 16
+  num_epochs: 100
+  lr: 0.001
+  device: "cuda:0"                          # cuda:0 | cpu

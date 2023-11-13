@@ -66,19 +66,6 @@ def resample(to_path, from_path):
         })
         return data
 
-
-# def split_in_patches(image_data, size=128):
-#     n_bandas, width, height = image_data.shape
-#     n_parches_x = width // size
-#     n_parches_y = height // size
-#     parches = []
-#     for i in range(n_parches_x):
-#         for j in range(n_parches_y):
-#             parche = image_data[:, i*size:(i+1)*size, j*size:(j+1)*size]
-#             parche_rellenado = rellenar_nan(parche)
-#             parches.append(parche_rellenado)
-#     return parches
-
 def split_in_patches(image_data, size=128, padding_value=np.nan):
     n_bandas, width, height = image_data.shape
     
@@ -105,8 +92,6 @@ def split_in_patches(image_data, size=128, padding_value=np.nan):
             parches.append(parche_rellenado)
     return parches
 
-
-
 def rellenar_nan(parche):
     for i in range(parche.shape[0]):
         banda = parche[i, :, :]
@@ -121,31 +106,6 @@ def get_model_pl(model_path):
     model = LandslideModel()
     return model.load_from_checkpoint(checkpoint_path=model_path)
 
-# def reconstruir_mascara(parches, size, original_shape):
-#     # _, height, width = original_shape
-#     _, width, height = original_shape
-#     mascara_reconstruida = np.zeros(original_shape, dtype=parches[0].dtype)
-#     n_parches_x = -(-width // size)
-#     n_parches_y = -(-height // size)
-#     contador = 0
-#     for i in range(n_parches_x):
-#         for j in range(n_parches_y):
-#             if contador >= len(parches):
-#                 print("Advertencia: No hay suficientes parches para llenar la imagen. Se rellenará con ceros.")
-#                 break
-#             parche = parches[contador]
-#             if parche.ndim == 3: parche = parche[0]
-#             espacio_restante_x = max(min(size, width - i * size), 0)
-#             espacio_restante_y = max(min(size, height - j * size), 0)
-#             # parche_ajustado = parche[:espacio_restante_y, :espacio_restante_x]
-#             parche_ajustado = parche[:espacio_restante_x, :espacio_restante_y]
-#             if parche_ajustado.shape != (espacio_restante_x, espacio_restante_y):#(espacio_restante_y, espacio_restante_x):
-#                 # parche_ajustado = np.pad(parche_ajustado, ((0, max(espacio_restante_y - parche_ajustado.shape[0], 0)), (0, max(espacio_restante_x - parche_ajustado.shape[1], 0))), 'constant')
-#                 parche_ajustado = np.pad(parche_ajustado, ((0, max(espacio_restante_x - parche_ajustado.shape[1], 0)), (0, max(espacio_restante_y - parche_ajustado.shape[0], 0))), 'constant')
-#             # mascara_reconstruida[0, j * size:j * size + espacio_restante_y, i * size:i * size + espacio_restante_x] = parche_ajustado
-#             mascara_reconstruida[0, i * size:i * size + espacio_restante_x, j * size:j * size + espacio_restante_y] = parche_ajustado
-#             contador += 1
-#     return mascara_reconstruida
 def reconstruir_mascara(parches, size, original_shape):
     _, height, width = original_shape
     mascara_reconstruida = np.zeros(original_shape, dtype=parches[0].dtype)

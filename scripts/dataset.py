@@ -3,6 +3,10 @@ from torch.utils.data import Dataset
 import numpy as np
 import glob
 import h5py
+import yaml
+
+with open('config.yaml', 'r') as file:
+    config = yaml.safe_load(file)
 
 def normalize_minmax(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
@@ -56,36 +60,20 @@ class DatasetLandslide(Dataset):
         - img (torch.Tensor): The image data as a PyTorch tensor.
         - mask (torch.Tensor): The mask data as a PyTorch tensor.
         """
-        TRAIN_XX = np.zeros((128, 128, 6))
-        # TRAIN_XX = np.zeros((128, 128, 14))
+        channels = config["dataset_config"]["channels"]
+        TRAIN_XX = np.zeros((128, 128, len(channels)))
+
         with h5py.File(self.train_paths[idx]) as hdf:
             data = np.array(hdf.get('img'))
             data[np.isnan(data)] = 0.000001
 
-            TRAIN_XX[:, :, 0] = data[:, :, 1]
-            TRAIN_XX[:, :, 1] = data[:, :, 2]
-            TRAIN_XX[:, :, 2] = data[:, :, 3]
-            TRAIN_XX[:, :, 3] = data[:, :, 7]
-            TRAIN_XX[:, :, 4] = data[:, :, 12]
-            TRAIN_XX[:, :, 5] = data[:, :, 13]
-            # TRAIN_XX[:, :, 0] = data[:, :, 0]
-            # TRAIN_XX[:, :, 1] = data[:, :, 1]
-            # TRAIN_XX[:, :, 2] = data[:, :, 2]
-            # TRAIN_XX[:, :, 3] = data[:, :, 3]
-            # TRAIN_XX[:, :, 4] = data[:, :, 4]
-            # TRAIN_XX[:, :, 5] = data[:, :, 5]
-            # TRAIN_XX[:, :, 6] = data[:, :, 6]
-            # TRAIN_XX[:, :, 7] = data[:, :, 7]
-            # TRAIN_XX[:, :, 8] = data[:, :, 8]
-            # TRAIN_XX[:, :, 9] = data[:, :, 9]
-            # TRAIN_XX[:, :, 10] = data[:, :, 10]
-            # TRAIN_XX[:, :, 11] = data[:, :, 11]
-            # TRAIN_XX[:, :, 12] = data[:, :, 12]
-            # TRAIN_XX[:, :, 13] = data[:, :, 13]
+            for i, channel in enumerate(channels):
+                TRAIN_XX[:, :, i] = data[:, :, channel]
 
             img = TRAIN_XX.transpose((2, 0, 1))  # Transponemos para tener (C, H, W)
-            # img = normalize_minmax(img)
-# 
+            if config["dataset_config"]["normalize"]:
+                img = normalize_minmax(img)
+
         mask = np.array([])
         if self.mask_paths != []:
             with h5py.File(self.mask_paths[idx]) as hdf:
@@ -96,15 +84,14 @@ class DatasetLandslide(Dataset):
 
 
 class DatasetLandslideEval(Dataset):
-    def __init__(self, parches, mascaras=None):
+    def __init__(self, patches):
         """
         Initializes the DatasetLandslide class.
         Args:
-        - parches (list): A list of image patches.
+        - patches (list): A list of image patches.
         - mascaras (list, optional): A list of corresponding mask patches. Default is None.
         """
-        self.parches = parches
-        # self.mascaras = mascaras if mascaras is not None else [np.zeros_like(parches[0][0, :, :]) for _ in parches]
+        self.patches = patches
 
     def __len__(self):
         """
@@ -112,7 +99,7 @@ class DatasetLandslideEval(Dataset):
         Returns:
         - len (int): The length of the dataset.
         """
-        return len(self.parches)
+        return len(self.patches)
 
     def __getitem__(self, idx):
         """
@@ -123,10 +110,7 @@ class DatasetLandslideEval(Dataset):
         - img (torch.Tensor): The image data as a PyTorch tensor.
         - mask (torch.Tensor): The mask data as a PyTorch tensor.
         """
-        img = self.parches[idx].astype(np.float32)
-        # mask = self.mascaras[idx].astype(np.float32)
-
-        # Aquí puedes aplicar cualquier preprocesamiento necesario a img y mask
-        # img = normalize_minmax(img)
-
+        img = self.patches[idx].astype(np.float32)
+        if config["dataset_config"]["normalize"]:
+            img = normalize_minmax(img)
         return torch.from_numpy(img)#, torch.from_numpy(mask)
