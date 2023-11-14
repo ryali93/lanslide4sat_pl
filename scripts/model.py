@@ -55,16 +55,19 @@ class LandslideModel(pl.LightningModule):
         model_type = config['model_config']['model_type']
         in_channels = config['model_config']['in_channels']
         num_classes = config['model_config']['num_classes']
-
+        alpha = config['model_config']['wce_weight']
+        self.lr = config['train_config']['lr']
+        
         if model_type == 'unet':
             self.model = UNet(in_channels=in_channels, out_channels=num_classes)
         else:
             encoder_weights = config['model_config']['encoder_weights']
+            print(model_type, in_channels, num_classes, encoder_weights)
             self.model = smp_model(in_channels=in_channels, 
-                                    out_channels=num_classes, 
-                                    model_type=model_type, 
-                                    num_classes=num_classes, 
-                                    encoder_weights=encoder_weights)
+                                   out_channels=num_classes, 
+                                   model_type=model_type, 
+                                   num_classes=num_classes, 
+                                   encoder_weights=encoder_weights)
         # self.model = unet_model(6, 1, 1)
         # self.model = UNet(6, 1)
 
@@ -162,16 +165,15 @@ class LandslideModel(pl.LightningModule):
         self.log('val_f1', loss_f1)
         self.log('val_loss', combined_loss)
 
-        # Loguear imágenes en wandb
-        if self.current_epoch % 10 == 0:  # Loguear cada 10 épocas
+        # Logging the first images of the batch
+        if self.current_epoch % 10 == 0:  # Logging every 10 epochs
             # x = x[:, 1:4]
             x = x[:, 0:3]
             x = x.permute(0, 2, 3, 1)
             y_hat = (y_hat > 0.5).float()
 
-            # Loguear las primeras imágenes del lote
             self.logger.experiment.log({
-                "image": wandb.Image(x[0].cpu().detach().numpy()*255, masks={
+                "image": wandb.Image(x[0].cpu().detach().numpy()*255, masks={ # Remove 255 if is necessary
                     "predictions": {
                         "mask_data": y_hat[0][0].cpu().detach().numpy(),
                         "class_labels": class_labels
@@ -192,10 +194,9 @@ class LandslideModel(pl.LightningModule):
                 optimizer (torch.optim.Adam): The optimizer for the model.
                 scheduler (torch.optim.lr_scheduler.StepLR): The learning rate scheduler for the optimizer.
             """
-            optimizer = Adam(self.parameters(), lr=0.001)
+            optimizer = Adam(self.parameters(), lr=self.lr)
             scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
             return [optimizer], [scheduler]
-
 
 ########################################################################
 

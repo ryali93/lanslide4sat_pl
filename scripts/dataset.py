@@ -8,6 +8,27 @@ import yaml
 with open('config.yaml', 'r') as file:
     config = yaml.safe_load(file)
 
+# https://github.com/iarai/Landslide4Sense-2022/issues/4#issuecomment-1195457420
+ls4_norm = {
+    1: 1111.81236406,
+    2: 824.63171476,
+    3: 663.41636217,
+    4: 445.17289745,
+    5: 645.8582926,
+    6: 1547.73508126,
+    7: 1960.44401001,
+    8: 1941.32229668,
+    9: 674.07572865,
+    10: 9.04787384,
+    11: 1113.98338755,
+    12: 519.90397929,
+    13: 20.29228266,
+    14: 772.83144788
+}
+
+def normalize_ls4(data, ls4_norm_band):
+    return data * ls4_norm_band
+
 def normalize_minmax(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
 
@@ -69,6 +90,8 @@ class DatasetLandslide(Dataset):
 
             for i, channel in enumerate(channels):
                 TRAIN_XX[:, :, i] = data[:, :, channel]
+                if self.train_paths[idx].find("image") != -1:
+                    TRAIN_XX[:, :, i] = normalize_ls4(data[:, :, channel], ls4_norm[channel])
 
             img = TRAIN_XX.transpose((2, 0, 1))  # Transponemos para tener (C, H, W)
             if config["dataset_config"]["normalize"]:

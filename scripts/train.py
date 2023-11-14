@@ -16,7 +16,7 @@ with open('config.yaml', 'r') as file:
 set_seed(config["train_config"]["seed"])
 
 # Path: scripts_pl/dataset.py
-data_path = config["train_config"]["data_path"]
+data_path = config["train_config"]["dataset_path"]
 
 # load dataset
 dataset = DatasetLandslide(data_path)
@@ -59,7 +59,7 @@ def train():
                       logger=wandb_logger, 
                       callbacks=[checkpoint_callback, early_stop_callback])
     trainer.fit(model, train_dataloader, val_dataloader)
-    trainer.save_checkpoint("models_n/unet_vanilla_6b_full_nn.ckpt")
+    trainer.save_checkpoint("models/modelo_test.ckpt")
 
 if __name__ == '__main__':
         train()
